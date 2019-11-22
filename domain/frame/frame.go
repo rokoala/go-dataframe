@@ -56,6 +56,12 @@ type DataFrame interface {
 	// Adiciona vários records ao DataFrame
 	AddRecords(recs []interface{}) error
 
+	// Retorna todos os Records
+	GetAllRecords() []Row
+
+	// Retorna record por indíce
+	GetRecord(idx int) (Row, error)
+
 	// Agregador das colunas pivots passadas.
 	// pivots: nome das colunas agregadas
 	Agg(pivots ...string) (Agg, error)
@@ -64,7 +70,7 @@ type DataFrame interface {
 	 * Métodos funcionais.
 	 */
 
-	// Executa a função para cada linha do dataframe
+	// Executa a função para cada linha do dataframe g
 	Foreach(func(pivots []string, vals []int))
 	// Mapeia cada linha do dataframe em um valor através da função de mapeamento.
 	Map(func(pivots []string, vals []int) ([]int, error)) DataFrame
@@ -91,7 +97,7 @@ type Agg interface {
 	Distinct() int
 	// Count retorna a quantidade de repetições de cada pivoteamento.
 	// A ordem do array é a mesma dos pivoteamentos gerados por qualquer função de agregação.
-	Count() []int
+	Count() ([]*Pivot, error)
 	// Sum é uma função de agregação que retorna os pivoteamentos das colunas da agregação.
 	Sum(idx int) ([]*Pivot, error)
 	// No caso de agregação da média deve ser
@@ -108,14 +114,14 @@ type Agg interface {
 type Pivot struct {
 	dim    int
 	typo   string   // O tipo: SUM | AVG | ...
-	pivots []string // O valor das colunas pivotadas
-	value  int      // O valor da operação de pivotamente sobre as colunas
+	Pivots []string // O valor das colunas pivotadas
+	Value  int      // O valor da operação de pivotamente sobre as colunas
 }
 
 // Estrutura de cada linha, contendo colunas pivotáveis e colunas agregáveis
 type Row struct {
-	pivots []string
-	vals   []int
+	Pivots []string `json:"pivots"`
+	Vals   []int    `json:"vals"`
 }
 
 // Estrutura de implementação da interface Dataframe
@@ -149,7 +155,7 @@ func (agg *Aggregation) Distinct() int {
 	m := make(map[string]int)
 
 	for _, row := range agg.frame.rows {
-		m[strings.Join(row.pivots[:], ",")] += 1
+		m[strings.Join(row.Pivots[:], ",")] += 1
 	}
 
 	return len(m)
@@ -179,20 +185,23 @@ func NewNavigationMap() *NavigationMap {
 	return &navMap
 }
 
-func (agg *Aggregation) Count() []int {
+func (agg *Aggregation) Count() ([]*Pivot, error) {
 	navMap := NewNavigationMap()
+	pivots := []*Pivot{}
 
 	for _, row := range agg.frame.rows {
-		key := strings.Join(row.pivots[:], ",")
+		key := strings.Join(row.Pivots[:], ",")
 		navMap.Set(key, navMap.m[key]+1)
 	}
 
-	keys := []int{}
+	// keys := []int{}
 	for _, value := range navMap.keys {
-		keys = append(keys, navMap.m[value])
+		// keys = append(keys, navMap.m[value])
+		p := strings.Split(value, ",")
+		pivots = append(pivots, &Pivot{dim: len(p), typo: "COUNT", Pivots: p, Value: navMap.m[value]})
 	}
 
-	return keys
+	return pivots, nil
 }
 
 func checkOutOfBounds(idx int, max int) error {
@@ -213,13 +222,13 @@ func (agg *Aggregation) Sum(idx int) ([]*Pivot, error) {
 	navMap := NewNavigationMap()
 
 	for _, row := range agg.frame.rows {
-		key := strings.Join(row.pivots[:], ",")
-		navMap.Set(key, navMap.m[key]+row.vals[idx])
+		key := strings.Join(row.Pivots[:], ",")
+		navMap.Set(key, navMap.m[key]+row.Vals[idx])
 	}
 
 	for _, value := range navMap.keys {
 		p := strings.Split(value, ",")
-		pivots = append(pivots, &Pivot{dim: len(p), typo: "SUM", pivots: p, value: navMap.m[value]})
+		pivots = append(pivots, &Pivot{dim: len(p), typo: "SUM", Pivots: p, Value: navMap.m[value]})
 	}
 
 	return pivots, nil
@@ -237,14 +246,14 @@ func (agg *Aggregation) Avg(idx int) ([]*Pivot, error) {
 	navMapCount := NewNavigationMap()
 
 	for _, row := range agg.frame.rows {
-		key := strings.Join(row.pivots[:], ",")
-		navMap.Set(key, navMap.m[key]+row.vals[idx])
+		key := strings.Join(row.Pivots[:], ",")
+		navMap.Set(key, navMap.m[key]+row.Vals[idx])
 		navMapCount.Set(key, navMapCount.m[key]+1)
 	}
 
 	for _, value := range navMap.keys {
 		p := strings.Split(value, ",")
-		pivots = append(pivots, &Pivot{dim: len(p), typo: "AVG", pivots: p, value: navMap.m[value] / navMapCount.m[value]})
+		pivots = append(pivots, &Pivot{dim: len(p), typo: "AVG", Pivots: p, Value: navMap.m[value] / navMapCount.m[value]})
 	}
 
 	return pivots, nil
@@ -258,15 +267,15 @@ func (agg *Aggregation) Max(idx int) ([]*Pivot, error) {
 
 	var maxPivot []*Pivot
 
-	max := agg.frame.rows[0].vals[idx]
+	max := agg.frame.rows[0].Vals[idx]
 
 	for _, row := range agg.frame.rows {
-		if max <= row.vals[idx] {
-			if max != row.vals[idx] {
+		if max <= row.Vals[idx] {
+			if max != row.Vals[idx] {
 				maxPivot = nil
 			}
-			max = row.vals[idx]
-			maxPivot = append(maxPivot, &Pivot{dim: 1, typo: "MAX", pivots: row.pivots, value: max})
+			max = row.Vals[idx]
+			maxPivot = append(maxPivot, &Pivot{dim: 1, typo: "MAX", Pivots: row.Pivots, Value: max})
 		}
 	}
 
@@ -281,15 +290,15 @@ func (agg *Aggregation) Min(idx int) ([]*Pivot, error) {
 
 	var minPivot []*Pivot
 
-	min := agg.frame.rows[0].vals[idx]
+	min := agg.frame.rows[0].Vals[idx]
 
 	for _, row := range agg.frame.rows {
-		if min >= row.vals[idx] {
-			if min != row.vals[idx] {
+		if min >= row.Vals[idx] {
+			if min != row.Vals[idx] {
 				minPivot = nil
 			}
-			min = row.vals[idx]
-			minPivot = append(minPivot, &Pivot{dim: 1, typo: "MIN", pivots: row.pivots, value: min})
+			min = row.Vals[idx]
+			minPivot = append(minPivot, &Pivot{dim: 1, typo: "MIN", Pivots: row.Pivots, Value: min})
 		}
 	}
 
@@ -319,7 +328,7 @@ func (df *dataFrame) AddRecords(recs []interface{}) error {
 			break
 		}
 
-		if addRecordErr := newDf.AddRecord(row.pivots, row.vals); addRecordErr != nil {
+		if addRecordErr := newDf.AddRecord(row.Pivots, row.Vals); addRecordErr != nil {
 			err = addRecordErr
 			break
 		}
@@ -332,6 +341,21 @@ func (df *dataFrame) AddRecords(recs []interface{}) error {
 	df = newDf
 
 	return nil
+}
+
+func (df *dataFrame) GetAllRecords() []Row {
+	return df.rows
+}
+
+func (df *dataFrame) GetRecord(idx int) (Row, error) {
+	for i, row := range df.rows {
+		if idx == i {
+			return row, nil
+		}
+	}
+
+	return Row{}, fmt.Errorf("Could not find index %d", idx)
+
 }
 
 // Obtém o index dos pivots de acordo com as strings passadas de argumento
@@ -372,9 +396,9 @@ func NewAgg(df *dataFrame, pivot []string, vals []string) (Agg, error) {
 	record := []string{}
 	for _, row := range df.rows {
 		for _, idx := range pivotIdx {
-			record = append(record, row.pivots[idx])
+			record = append(record, row.Pivots[idx])
 		}
-		newDf.AddRecord(record, row.vals)
+		newDf.AddRecord(record, row.Vals)
 		record = nil
 	}
 
@@ -391,7 +415,7 @@ func (df *dataFrame) Agg(pivots ...string) (Agg, error) {
 
 func (df *dataFrame) Foreach(cb func(pivots []string, vals []int)) {
 	for i, _ := range df.rows {
-		cb(df.rows[i].pivots, df.rows[i].vals)
+		cb(df.rows[i].Pivots, df.rows[i].Vals)
 	}
 }
 
@@ -448,7 +472,7 @@ func GetPivotOrNil(pivots []*Pivot, pivotation ...string) *Pivot {
 
 	found := false
 	for _, pivot := range pivots {
-		if strings.Join(pivot.pivots, ",") == strings.Join(pivotation, ",") {
+		if strings.Join(pivot.Pivots, ",") == strings.Join(pivotation, ",") {
 			p = pivot
 			found = true
 		}

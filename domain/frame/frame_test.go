@@ -60,28 +60,28 @@ func TestAggDataFrame(t *testing.T) {
 	// Testa a soma da coluna V1
 	pivots, _ = agg.Sum(0)
 	v1_ab := GetPivotOrNil(pivots, "a", "b")
-	assert.Equal(10, v1_ab.value)
+	assert.Equal(10, v1_ab.Value)
 
 	// Testa a soma da coluna V2
 	pivots, _ = agg.Sum(1)
 	v2_ab := GetPivotOrNil(pivots, "a", "b")
-	assert.Equal(100, v2_ab.value)
+	assert.Equal(100, v2_ab.Value)
 
 	// Testa a média da coluna V1
 	pivots, _ = agg.Avg(0)
 	avg_v1 := GetPivotOrNil(pivots, "i", "j")
-	assert.Equal(35, avg_v1.value)
+	assert.Equal(35, avg_v1.Value)
 
 	// Testa max da coluna v1
 	pivots, _ = agg.Max(0)
 	max_v1 := GetPivotOrNil(pivots, "i", "j")
-	assert.Equal(40, max_v1.value)
+	assert.Equal(40, max_v1.Value)
 
 	// Testa mínimo da coluna v1
 	pivots, _ = agg.Min(0)
 	expected := [][]string{{"a", "b"}, {"a", "d"}}
 	for i, pivot := range pivots {
-		assert.Equal(expected[i], pivot.pivots)
+		assert.Equal(expected[i], pivot.Pivots)
 	}
 	// Testa pivot não existente
 	min_v1 := GetPivotOrNil(pivots, "i", "j")
