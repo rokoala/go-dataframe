@@ -57,10 +57,16 @@ var routes = Routes{
 		service.GetAggSum,
 	},
 	Route{
-		"GetAggSum",
+		"GetAggCount",
 		"GET",
 		"/frame/agg/count",
 		service.GetAggCount,
+	},
+	Route{
+		"GetAgg",
+		"GET",
+		"/frame/agg",
+		service.GetAgg,
 	},
 	Route{
 		"GetMetricsTotal",

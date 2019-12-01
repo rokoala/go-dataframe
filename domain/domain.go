@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"sync"
 
 	"github.com/go-dataframe/domain/frame"
 )
@@ -22,6 +23,7 @@ type Agg struct {
 }
 
 type AggResultRow struct {
+	Type   string   `json:"type"`
 	Pivots []string `json:"pivots"`
 	Value  int      `json:"value"`
 }
@@ -84,12 +86,12 @@ func CleanDataframe() frame.DataFrame {
 	return dataFrame
 }
 
-func createAggResult(pivots []*frame.Pivot) AggResult {
-	var aggSum AggResult
+func createAggResult(aggType string, pivots []*frame.Pivot) AggResult {
+	var aggResult AggResult
 	for _, pivot := range pivots {
-		aggSum = append(aggSum, AggResultRow{pivot.Pivots, pivot.Value})
+		aggResult = append(aggResult, AggResultRow{aggType, pivot.Pivots, pivot.Value})
 	}
-	return aggSum
+	return aggResult
 }
 
 func GetAggSum(options Agg) (AggResult, error) {
@@ -100,7 +102,7 @@ func GetAggSum(options Agg) (AggResult, error) {
 	agg, _ := dataFrame.Agg(options.Pivots...)
 	pivots, _ := agg.Sum(options.AggColumn)
 
-	return createAggResult(pivots), nil
+	return createAggResult("sum", pivots), nil
 }
 
 func GetAggCount(options Agg) (AggResult, error) {
@@ -111,5 +113,47 @@ func GetAggCount(options Agg) (AggResult, error) {
 	agg, _ := dataFrame.Agg(options.Pivots...)
 	pivots, _ := agg.Count()
 
-	return createAggResult(pivots), nil
+	return createAggResult("count", pivots), nil
+}
+
+func aggRun(pivots []string, aggColumn int) []AggResult {
+
+	aggResult := make(chan AggResult)
+	var groupResult []AggResult
+	var wg sync.WaitGroup
+
+	agg, _ := dataFrame.Agg(pivots...)
+
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		sum, _ := agg.Sum(aggColumn)
+		aggResult <- createAggResult("sum", sum)
+	}()
+
+	go func() {
+		defer wg.Done()
+		count, _ := agg.Count()
+		aggResult <- createAggResult("count", count)
+	}()
+
+	go func() {
+		for result := range aggResult {
+			groupResult = append(groupResult, result)
+		}
+	}()
+
+	wg.Wait()
+
+	return groupResult
+}
+
+func GetAgg(options Agg) ([]AggResult, error) {
+
+	if err := checkInstanceDataframe(); err != nil {
+		return []AggResult{}, err
+	}
+
+	return aggRun(options.Pivots, options.AggColumn), nil
 }

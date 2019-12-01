@@ -111,13 +111,13 @@ func TestRESTAggDataframe(t *testing.T) {
 	}`
 
 	// Verifica agg sum
-	testRequestStatusAndBody(t, router, "GET", "/frame/agg/sum", bodyJSON, 200, `[{"pivots":["a","d"],"value":2}]`)
+	testRequestStatusAndBody(t, router, "GET", "/frame/agg/sum", bodyJSON, 200, `[{"type":"sum","pivots":["a","d"],"value":2}]`)
 
 	// Adiciona um novo record
 	testRequestStatus(t, router, "POST", "/frame/row", dfRowJSON, 201)
 
 	// Verifica agg count
-	testRequestStatusAndBody(t, router, "GET", "/frame/agg/count", bodyJSON, 200, `[{"pivots":["a","d"],"value":2}]`)
+	testRequestStatusAndBody(t, router, "GET", "/frame/agg/count", bodyJSON, 200, `[{"type":"count","pivots":["a","d"],"value":2}]`)
 }
 
 func TestRESTMetrics(t *testing.T) {

@@ -135,3 +135,21 @@ func GetAggCount(w http.ResponseWriter, r *http.Request) {
 	body := bodyReader(w, r)
 	writerAgg(w, body, domain.GetAggCount)
 }
+
+func GetAgg(w http.ResponseWriter, r *http.Request) {
+	body := bodyReader(w, r)
+
+	var agg domain.Agg
+
+	if err := json.Unmarshal(body, &agg); err != nil {
+		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+		w.WriteHeader(422)
+		if err := json.NewEncoder(w).Encode(err); err != nil {
+			log.Fatal(err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
+
+	rows, err := domain.GetAgg(agg)
+	verifyErrorEncode(w, err, rows)
+}
