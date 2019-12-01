@@ -3,6 +3,7 @@ package metrics
 import (
 	"net/http"
 	"strings"
+	"sync"
 )
 
 type Metrics struct {
@@ -12,6 +13,8 @@ type Metrics struct {
 }
 
 var metrics *Metrics
+
+var mutex = &sync.Mutex{}
 
 func NewMetrics(totalCalls, totalGetCalls, totalPostCalls int) *Metrics {
 	metrics = &Metrics{totalCalls, totalGetCalls, totalPostCalls}
@@ -41,11 +44,17 @@ func (metrics *Metrics) MetricsMiddleware(next http.Handler) http.Handler {
 		if !strings.Contains(r.URL.String(), "/metrics/") {
 			switch r.Method {
 			case "GET":
+				mutex.Lock()
 				metrics.totalGetCalls++
+				mutex.Unlock()
 			case "POST":
+				mutex.Lock()
 				metrics.totalPostCalls++
+				mutex.Unlock()
 			}
+			mutex.Lock()
 			metrics.totalCalls++
+			mutex.Unlock()
 		}
 		// Call the next handler, which can be another middleware in the chain, or the final handler.
 		next.ServeHTTP(w, r)
