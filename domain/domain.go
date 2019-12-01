@@ -1,8 +1,12 @@
 package domain
 
 import (
+	"context"
 	"errors"
+	"fmt"
+	"log"
 	"sync"
+	"time"
 
 	"github.com/go-dataframe/domain/frame"
 )
@@ -122,29 +126,60 @@ func aggRun(pivots []string, aggColumn int) []AggResult {
 	var groupResult []AggResult
 	var wg sync.WaitGroup
 
+	// simulates timeout
+	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), time.Duration(10)*time.Second)
+
+	defer func() {
+		fmt.Println("Finish agg")
+		cancel()
+	}()
+
 	agg, _ := dataFrame.Agg(pivots...)
 
 	wg.Add(2)
 
 	go func() {
-		defer wg.Done()
+		log.Println("-> Go sum")
+
+		//simulates slow agg async
+		// time.Sleep(5 * time.Second)
 		sum, _ := agg.Sum(aggColumn)
-		aggResult <- createAggResult("sum", sum)
+
+		select {
+		case <-ctxWithTimeout.Done():
+			log.Println("Timeout during sum...")
+			aggResult <- AggResult{}
+		default:
+			aggResult <- createAggResult("sum", sum)
+		}
 	}()
 
 	go func() {
-		defer wg.Done()
+		log.Println("-> Go count")
+		//simulates slow count async
+		// time.Sleep(5 * time.Second)
 		count, _ := agg.Count()
-		aggResult <- createAggResult("count", count)
+
+		select {
+		case <-ctxWithTimeout.Done():
+			log.Println("Timeout during count...")
+			aggResult <- AggResult{}
+		default:
+			aggResult <- createAggResult("count", count)
+		}
+
 	}()
 
 	go func() {
 		for result := range aggResult {
 			groupResult = append(groupResult, result)
+			wg.Done()
 		}
 	}()
 
 	wg.Wait()
+
+	log.Println("Agg done...")
 
 	return groupResult
 }
